@@ -37,6 +37,7 @@ func main() {
 		exportChainCmd,
 		consensusCmd,
 		serveDealStatsCmd,
+		syncCmd,
 	}
 
 	app := &cli.App{
