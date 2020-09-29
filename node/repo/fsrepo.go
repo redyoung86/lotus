@@ -115,13 +115,36 @@ func (fsr *FsRepo) Init(t RepoType) error {
 }
 
 func (fsr *FsRepo) initConfig(t RepoType) error {
-	cfgP := filepath.Join(fsr.path, fsConfig)
+	comm, err := config.ConfigComment(defConfForType(t))
+	if err != nil {
+		return xerrors.Errorf("comment: %w", err)
+	}
 
+	return fsr.writeConfig(comm, false)
+}
+
+func (fsr *FsRepo) OverrideConfig(t RepoType, path string) error {
+	newCfg, err := config.FromFile(path, defConfForType(t))
+	if err != nil {
+		return err
+	}
+
+	buf := new(bytes.Buffer)
+	e := toml.NewEncoder(buf)
+	if err := e.Encode(newCfg); err != nil {
+		return xerrors.Errorf("encoding config: %w", err)
+	}
+
+	return fsr.writeConfig(buf.Bytes(), true)
+}
+
+func (fsr *FsRepo) writeConfig(cfgBytes []byte, override bool) error {
+	cfgP := filepath.Join(fsr.path, fsConfig)
 	_, err := os.Stat(cfgP)
-	if err == nil {
+	if err == nil && !override {
 		// exists
 		return nil
-	} else if !os.IsNotExist(err) {
+	} else if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
@@ -130,17 +153,13 @@ func (fsr *FsRepo) initConfig(t RepoType) error {
 		return err
 	}
 
-	comm, err := config.ConfigComment(defConfForType(t))
+	_, err = c.Write(cfgBytes)
 	if err != nil {
-		return xerrors.Errorf("comment: %w", err)
-	}
-	_, err = c.Write(comm)
-	if err != nil {
-		return xerrors.Errorf("write config: %w", err)
+		return xerrors.Errorf("writing config: %w", err)
 	}
 
 	if err := c.Close(); err != nil {
-		return xerrors.Errorf("close config: %w", err)
+		return xerrors.Errorf("closing config: %w", err)
 	}
 	return nil
 }

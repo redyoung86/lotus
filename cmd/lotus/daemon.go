@@ -127,6 +127,10 @@ var DaemonCmd = &cli.Command{
 			Usage: "manage open file limit",
 			Value: true,
 		},
+		&cli.StringFlag{
+			Name:  "config",
+			Usage: "specify path of config file to use",
+		},
 	},
 	Action: func(cctx *cli.Context) error {
 		err := runmetrics.Enable(runmetrics.RunMetricOptions{
@@ -182,6 +186,13 @@ var DaemonCmd = &cli.Command{
 
 		if err := r.Init(repo.FullNode); err != nil && err != repo.ErrRepoExists {
 			return xerrors.Errorf("repo init error: %w", err)
+		}
+
+		if cctx.String("config") != "" {
+			err = r.OverrideConfig(repo.FullNode, cctx.String("config"))
+			if err != nil {
+				return xerrors.Errorf("overriding config: %w", err)
+			}
 		}
 
 		if err := paramfetch.GetParams(lcli.ReqContext(cctx), build.ParametersJSON(), 0); err != nil {
