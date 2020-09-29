@@ -312,6 +312,8 @@ type FullNode interface {
 	StateReadState(ctx context.Context, actor address.Address, tsk types.TipSetKey) (*ActorState, error)
 	// StateListMessages looks back and returns all messages with a matching to or from address, stopping at the given height.
 	StateListMessages(ctx context.Context, match *types.Message, tsk types.TipSetKey, toht abi.ChainEpoch) ([]cid.Cid, error)
+	// StateDecodeParams attempts to decode the params field of a specified msg based on the methodNum and recipient actor.
+	StateDecodeParams(ctx context.Context, msg cid.Cid, tsk types.TipSetKey) (*DecodedParams, error)
 
 	// StateNetworkName returns the name of the network the node is synced to
 	StateNetworkName(context.Context) (dtypes.NetworkName, error)
@@ -552,6 +554,11 @@ type Message struct {
 type ActorState struct {
 	Balance types.BigInt
 	State   interface{}
+}
+
+type DecodedParams struct {
+	MethodName string
+	Params     interface{}
 }
 
 type PCHDir int

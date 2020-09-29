@@ -31,17 +31,20 @@ import (
 )
 
 type Invoker struct {
-	builtInCode  map[cid.Cid]nativeCode
-	builtInState map[cid.Cid]reflect.Type
+	builtInCode   map[cid.Cid]nativeCode
+	builtInState  map[cid.Cid]reflect.Type
+	builtInParams map[cid.Cid]paramsList
 }
 
 type invokeFunc func(rt vmr.Runtime, params []byte) ([]byte, aerrors.ActorError)
 type nativeCode []invokeFunc
+type paramsList []reflect.Type
 
 func NewInvoker() *Invoker {
 	inv := &Invoker{
-		builtInCode:  make(map[cid.Cid]nativeCode),
-		builtInState: make(map[cid.Cid]reflect.Type),
+		builtInCode:   make(map[cid.Cid]nativeCode),
+		builtInState:  make(map[cid.Cid]reflect.Type),
+		builtInParams: make(map[cid.Cid]paramsList),
 	}
 
 	// add builtInCode using: register(cid, singleton)
@@ -76,19 +79,20 @@ func (inv *Invoker) Invoke(codeCid cid.Cid, rt vmr.Runtime, method abi.MethodNum
 }
 
 func (inv *Invoker) Register(c cid.Cid, instance Invokee, state interface{}) {
-	code, err := inv.transform(instance)
+	code, params, err := inv.transform(instance)
 	if err != nil {
 		panic(xerrors.Errorf("%s: %w", string(c.Hash()), err))
 	}
 	inv.builtInCode[c] = code
 	inv.builtInState[c] = reflect.TypeOf(state)
+	inv.builtInParams[c] = params
 }
 
 type Invokee interface {
 	Exports() []interface{}
 }
 
-func (*Invoker) transform(instance Invokee) (nativeCode, error) {
+func (*Invoker) transform(instance Invokee) (nativeCode, paramsList, error) {
 	itype := reflect.TypeOf(instance)
 	exports := instance.Exports()
 	for i, m := range exports {
@@ -105,39 +109,40 @@ func (*Invoker) transform(instance Invokee) (nativeCode, error) {
 		meth := reflect.ValueOf(m)
 		t := meth.Type()
 		if t.Kind() != reflect.Func {
-			return nil, newErr("is not a function")
+			return nil, nil, newErr("is not a function")
 		}
 		if t.NumIn() != 2 {
-			return nil, newErr("wrong number of inputs should be: " +
+			return nil, nil, newErr("wrong number of inputs should be: " +
 				"vmr.Runtime, <parameter>")
 		}
 		if t.In(0) != reflect.TypeOf((*vmr.Runtime)(nil)).Elem() {
-			return nil, newErr("first arguemnt should be vmr.Runtime")
+			return nil, nil, newErr("first arguemnt should be vmr.Runtime")
 		}
 		if t.In(1).Kind() != reflect.Ptr {
-			return nil, newErr("second argument should be of kind reflect.Ptr")
+			return nil, nil, newErr("second argument should be of kind reflect.Ptr")
 		}
 
 		if t.NumOut() != 1 {
-			return nil, newErr("wrong number of outputs should be: " +
+			return nil, nil, newErr("wrong number of outputs should be: " +
 				"cbg.CBORMarshaler")
 		}
 		o0 := t.Out(0)
 		if !o0.Implements(reflect.TypeOf((*cbg.CBORMarshaler)(nil)).Elem()) {
-			return nil, newErr("output needs to implement cgb.CBORMarshaler")
+			return nil, nil, newErr("output needs to implement cgb.CBORMarshaler")
 		}
 	}
 	code := make(nativeCode, len(exports))
+	params := make(paramsList, len(exports))
 	for id, m := range exports {
 		if m == nil {
 			continue
 		}
 		meth := reflect.ValueOf(m)
+		paramT := meth.Type().In(1).Elem()
+		param := reflect.New(paramT)
+		params[id] = paramT
 		code[id] = reflect.MakeFunc(reflect.TypeOf((invokeFunc)(nil)),
 			func(in []reflect.Value) []reflect.Value {
-				paramT := meth.Type().In(1).Elem()
-				param := reflect.New(paramT)
-
 				inBytes := in[1].Interface().([]byte)
 				if err := DecodeParams(inBytes, param.Interface()); err != nil {
 					aerr := aerrors.Absorb(err, 1, "failed to decode parameters")
@@ -164,7 +169,7 @@ func (*Invoker) transform(instance Invokee) (nativeCode, error) {
 			}).Interface().(invokeFunc)
 
 	}
-	return code, nil
+	return code, params, nil
 }
 
 func DecodeParams(b []byte, out interface{}) error {
@@ -199,4 +204,31 @@ func DumpActorState(code cid.Cid, b []byte) (interface{}, error) {
 	}
 
 	return rv.Elem().Interface(), nil
+}
+
+// TODO: ActorUpgrade: Support versioning
+// TODO: Doesn't work well for calls to InitActor's Exec, since the actual ConstructorParams don't get decoded
+func DumpParams(code cid.Cid, method abi.MethodNum, b []byte) (interface{}, error) {
+	if code == builtin0.AccountActorCodeID { // Account code special case
+		return nil, nil
+	}
+
+	i := NewInvoker() // TODO: register builtins in init block
+
+	paramTypes, ok := i.builtInParams[code]
+	if !ok {
+		return nil, xerrors.Errorf("params list for actor %s not found", code)
+	}
+
+	params := reflect.New(paramTypes[method])
+	um, ok := params.Interface().(cbg.CBORUnmarshaler)
+	if !ok {
+		return nil, xerrors.New("param does not implement CBORUnmarshaler")
+	}
+
+	if err := um.UnmarshalCBOR(bytes.NewReader(b)); err != nil {
+		return nil, xerrors.Errorf("unmarshaling param: %w", err)
+	}
+
+	return params.Interface(), nil
 }

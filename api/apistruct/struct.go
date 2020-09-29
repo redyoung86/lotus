@@ -199,6 +199,7 @@ type FullNodeStruct struct {
 		StateGetReceipt                    func(context.Context, cid.Cid, types.TipSetKey) (*types.MessageReceipt, error)                                      `perm:"read"`
 		StateMinerSectorCount              func(context.Context, address.Address, types.TipSetKey) (api.MinerSectors, error)                                   `perm:"read"`
 		StateListMessages                  func(ctx context.Context, match *types.Message, tsk types.TipSetKey, toht abi.ChainEpoch) ([]cid.Cid, error)        `perm:"read"`
+		StateDecodeParams                  func(ctx context.Context, msg cid.Cid, tsk types.TipSetKey) (*api.DecodedParams, error)                             `perm:"read"`
 		StateCompute                       func(context.Context, abi.ChainEpoch, []*types.Message, types.TipSetKey) (*api.ComputeStateOutput, error)           `perm:"read"`
 		StateVerifiedClientStatus          func(context.Context, address.Address, types.TipSetKey) (*abi.StoragePower, error)                                  `perm:"read"`
 		StateDealProviderCollateralBounds  func(context.Context, abi.PaddedPieceSize, bool, types.TipSetKey) (api.DealCollateralBounds, error)                 `perm:"read"`
@@ -877,6 +878,10 @@ func (c *FullNodeStruct) StateGetReceipt(ctx context.Context, msg cid.Cid, tsk t
 
 func (c *FullNodeStruct) StateListMessages(ctx context.Context, match *types.Message, tsk types.TipSetKey, toht abi.ChainEpoch) ([]cid.Cid, error) {
 	return c.Internal.StateListMessages(ctx, match, tsk, toht)
+}
+
+func (c *FullNodeStruct) StateDecodeParams(ctx context.Context, msg cid.Cid, tsk types.TipSetKey) (*api.DecodedParams, error) {
+	return c.Internal.StateDecodeParams(ctx, msg, tsk)
 }
 
 func (c *FullNodeStruct) StateCompute(ctx context.Context, height abi.ChainEpoch, msgs []*types.Message, tsk types.TipSetKey) (*api.ComputeStateOutput, error) {

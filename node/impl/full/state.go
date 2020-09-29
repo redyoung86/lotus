@@ -422,6 +422,38 @@ func (a *StateAPI) StateReadState(ctx context.Context, actor address.Address, ts
 	}, nil
 }
 
+func (a *StateAPI) StateDecodeParams(ctx context.Context, msgCid cid.Cid, tsk types.TipSetKey) (*api.DecodedParams, error) {
+	ts, err := a.Chain.GetTipSetFromKey(tsk)
+	if err != nil {
+		return nil, xerrors.Errorf("loading tipset %s: %w", tsk, err)
+	}
+	state, err := a.stateForTs(ctx, ts)
+	if err != nil {
+		return nil, xerrors.Errorf("getting state for tipset: %w", err)
+	}
+
+	msg, err := a.Chain.GetMessage(msgCid)
+	if err != nil {
+		return nil, xerrors.Errorf("loading message: %w", err)
+	}
+
+	act, err := state.GetActor(msg.To)
+	if err != nil {
+		return nil, xerrors.Errorf("getting actor: %w", err)
+	}
+
+	params, err := vm.DumpParams(act.Code, msg.Method, msg.Params)
+	if err != nil {
+		return nil, xerrors.Errorf("dumping params: %w", err)
+	}
+
+	return &api.DecodedParams{
+		// TODO: MethodName if wanted
+		MethodName: "",
+		Params:     params,
+	}, nil
+}
+
 // This is on StateAPI because miner.Miner requires this, and MinerAPI requires miner.Miner
 func (a *StateAPI) MinerGetBaseInfo(ctx context.Context, maddr address.Address, epoch abi.ChainEpoch, tsk types.TipSetKey) (*api.MiningBaseInfo, error) {
 	return stmgr.MinerGetBaseInfo(ctx, a.StateManager, a.Beacon, tsk, epoch, maddr, a.ProofVerifier)
