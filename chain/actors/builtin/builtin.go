@@ -18,6 +18,8 @@ import (
 	smoothing2 "github.com/filecoin-project/specs-actors/v2/actors/util/smoothing"
 )
 
+var SystemActorAddr = builtin0.SystemActorAddr
+
 // TODO: Why does actors have 2 different versions of this?
 type SectorInfo = proof0.SectorInfo
 type PoStProof = proof0.PoStProof
@@ -65,4 +67,21 @@ func ActorNameByCode(c cid.Cid) string {
 
 func IsBuiltinActor(c cid.Cid) bool {
 	return builtin0.IsBuiltinActor(c) || builtin2.IsBuiltinActor(c)
+}
+
+func IsPrincipal(c cid.Cid) bool {
+	return builtin0.IsPrincipal(c) || builtin2.IsPrincipal(c)
+}
+
+func IsStorageMinerActor(c cid.Cid) bool {
+	return c == builtin0.StorageMinerActorCodeID || c == builtin2.StorageMinerActorCodeID
+}
+
+func IsMultisigActor(c cid.Cid) bool {
+	return c == builtin0.MultisigActorCodeID || c == builtin2.MultisigActorCodeID
+
+}
+
+func IsPaymentChannelActor(c cid.Cid) bool {
+	return c == builtin0.PaymentChannelActorCodeID || c == builtin2.PaymentChannelActorCodeID
 }
